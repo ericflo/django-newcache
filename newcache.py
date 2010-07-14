@@ -29,7 +29,7 @@ FLAVOR = getattr(settings, 'FLAVOR', '')
 
 CACHE_VERSION = str(getattr(settings, 'CACHE_VERSION', 1))
 CACHE_BEHAVIORS = getattr(settings, 'CACHE_BEHAVIORS', {'hash': 'crc'})
-CACHE_KEY_MODULE = getattr(settings, 'CACHE_KEY_FUNC', 'newcache')
+CACHE_KEY_MODULE = getattr(settings, 'CACHE_KEY_MODULE', 'newcache')
 
 def get_key(key):
     """
