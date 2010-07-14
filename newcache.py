@@ -29,17 +29,16 @@ FLAVOR = getattr(settings, 'FLAVOR', '')
 
 CACHE_VERSION = str(getattr(settings, 'CACHE_VERSION', 1))
 CACHE_BEHAVIORS = getattr(settings, 'CACHE_BEHAVIORS', {'hash': 'crc'})
-CACHE_KEY_FUNC = getattr(settings, 'CACHE_KEY_FUNC',
-    'newcache.default_key_func')
+CACHE_KEY_MODULE = getattr(settings, 'CACHE_KEY_FUNC', 'newcache')
 
-def default_key_func(key):
+def key_func(key):
     """
     Returns a hashed, versioned, flavored version of the string that was input.
     """
     hashed = hashlib.md5(smart_str(key)).hexdigest()
     return ''.join((settings.FLAVOR, '-', CACHE_VERSION, '-', hashed))
 
-get_key = importlib.import_module(CACHE_KEY_FUNC)
+key_func = importlib.import_module(CACHE_KEY_MODULE).key_func
 
 class CacheClass(BaseCache):
 
@@ -88,46 +87,49 @@ class CacheClass(BaseCache):
         return timeout
 
     def add(self, key, value, timeout=None):
-        return self._cache.add(get_key(key), value,
+        return self._cache.add(key_func(key), value,
             self._get_memcache_timeout(timeout))
 
     def get(self, key, default=None):
-        val = self._cache.get(get_key(key))
+        val = self._cache.get(key_func(key))
         if val is None:
             return default
         return val
 
     def set(self, key, value, timeout=None):
-        self._cache.set(get_key(key), value,
+        self._cache.set(key_func(key), value,
             self._get_memcache_timeout(timeout))
 
     def delete(self, key):
-        self._cache.delete(get_key(key))
+        self._cache.delete(key_func(key))
 
     def get_many(self, keys):
-        return self._cache.get_multi(map(get_key, keys))
+        rvals = map(key_func, keys)
+        resp = self._cache.get_multi(rvals)
+        reverse = dict(zip(rvals, keys))
+        return dict(((reverse[k], v) for k, v in resp.iteritems()))
 
     def close(self, **kwargs):
         self._cache.disconnect_all()
 
     def incr(self, key, delta=1):
         try:
-            return self._cache.incr(get_key(key), delta)
+            return self._cache.incr(key_func(key), delta)
         except NotFoundError:
             raise ValueError("Key '%s' not found" % (key,))
 
     def decr(self, key, delta=1):
         try:
-            return self._cache.decr(get_key(key), delta)
+            return self._cache.decr(key_func(key), delta)
         except NotFoundError:
             raise ValueError("Key '%s' not found" % (key,))
     
     def set_many(self, data, timeout=0):
-        safe_data = dict(((get_key(k), v) for k, v in data.iteritems()))
+        safe_data = dict(((key_func(k), v) for k, v in data.iteritems()))
         self._cache.set_multi(safe_data, self._get_memcache_timeout(timeout))
     
     def delete_many(self, keys):
-        self._cache.delete_multi(map(get_key, keys))
+        self._cache.delete_multi(map(key_func, keys))
     
     def clear(self):
         self._cache.flush_all()
