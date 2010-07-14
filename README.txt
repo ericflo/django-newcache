@@ -72,3 +72,9 @@ All of the above is simply the default, you may provide your own callable
 function to be run on each key, by supplying the CACHE_KEY_MODULE setting. It
 must provide a get_key function which takes any instance of basestring and 
 output a str.
+
+
+Features to be Implemented
+--------------------------
+
+ * Herd effect prevention
