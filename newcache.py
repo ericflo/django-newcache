@@ -36,7 +36,7 @@ def get_key(key):
     Returns a hashed, versioned, flavored version of the string that was input.
     """
     hashed = hashlib.md5(smart_str(key)).hexdigest()
-    return ''.join((settings.FLAVOR, '-', CACHE_VERSION, '-', hashed))
+    return ''.join((FLAVOR, '-', CACHE_VERSION, '-', hashed))
 
 key_func = importlib.import_module(CACHE_KEY_MODULE).get_key
 
