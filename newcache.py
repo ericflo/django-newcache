@@ -31,14 +31,14 @@ CACHE_VERSION = str(getattr(settings, 'CACHE_VERSION', 1))
 CACHE_BEHAVIORS = getattr(settings, 'CACHE_BEHAVIORS', {'hash': 'crc'})
 CACHE_KEY_MODULE = getattr(settings, 'CACHE_KEY_FUNC', 'newcache')
 
-def key_func(key):
+def get_key(key):
     """
     Returns a hashed, versioned, flavored version of the string that was input.
     """
     hashed = hashlib.md5(smart_str(key)).hexdigest()
     return ''.join((settings.FLAVOR, '-', CACHE_VERSION, '-', hashed))
 
-key_func = importlib.import_module(CACHE_KEY_MODULE).key_func
+key_func = importlib.import_module(CACHE_KEY_MODULE).get_key
 
 class CacheClass(BaseCache):
 
