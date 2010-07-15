@@ -87,60 +87,97 @@ class CacheClass(BaseCache):
             timeout += int(time.time())
         return timeout
 
-    def add(self, key, value, timeout=None):
-        packed = (value, (timeout or self.default_timeout) + int(time.time()))
+    def add(self, key, value, timeout=None, herd=True):
+        if herd:
+            packed = (value,
+                (timeout or self.default_timeout) + int(time.time()))
+            real_timeout = timeout + CACHE_HERD_TIMEOUT
+        else:
+            packed, real_timeout = value, timeout
         return self._cache.add(key_func(key), packed,
-            self._get_memcache_timeout(timeout + CACHE_HERD_TIMEOUT))
+            self._get_memcache_timeout(real_timeout))
 
     def get(self, key, default=None):
         encoded_key = key_func(key)
         packed = self._cache.get(encoded_key)
         if packed is None:
             return default
+        
+        # Try to unpack the value into a timeout and the original value, and if
+        # that fails, then skip the herd mechanism.
         try:
             val, timeout = packed
         except (TypeError, ValueError):
             return packed
+        
+        # If the cache has expired according to the embedded timeout, then
+        # shove it back into the cache for a while, but act as if it was a
+        # cache miss.
         current_time = int(time.time())
         if current_time > timeout:
             packed = (val, CACHE_HERD_TIMEOUT + current_time)
             self._cache.set(encoded_key, packed,
                 self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
             return default
+        
         return val
 
-    def set(self, key, value, timeout=None):
-        packed = (value, (timeout or self.default_timeout) + int(time.time()))
-        self._cache.set(key_func(key), packed,
-            self._get_memcache_timeout(timeout + CACHE_HERD_TIMEOUT))
+    def set(self, key, value, timeout=None, herd=True):
+        if herd:
+            packed = (value,
+                (timeout or self.default_timeout) + int(time.time()))
+            real_timeout = timeout + CACHE_HERD_TIMEOUT
+        else:
+            packed, real_timeout = value, timeout
+        return self._cache.set(key_func(key), packed,
+            self._get_memcache_timeout(real_timeout))
 
     def delete(self, key):
         self._cache.delete(key_func(key))
 
     def get_many(self, keys):
+        # First, map all of the keys through our key function
         rvals = map(key_func, keys)
+        
         packed_resp = self._cache.get_multi(rvals)
+        
         resp = {}
         reinsert = {}
         current_time = int(time.time())
+        
         for key, packed in packed_resp.iteritems():
+            # If it was a miss, treat it as a miss to our response & continue
             if packed is None:
                 resp[key] = packed
                 continue
+            
+            # Try to unpack the value into a timeout and the original value, and if
+            # that fails, then skip the herd mechanism.
             try:
                 val, timeout = packed
             except (TypeError, ValueError):
                 resp[key] = packed
                 continue
+            
+            # If the cache has expired according to the embedded timeout, then
+            # treat it as a miss, and add it to a dict of values to re-insert
+            # for a short period of time.
             if current_time > timeout:
                 reinsert[key] = (val, CACHE_HERD_TIMEOUT + current_time)
                 resp[key] = None
             else:
                 resp[key] = val
+        
+        # If there are values to re-insert for a short period of time, then do
+        # so now.
         if reinsert:
             self._cache.set_multi(reinsert,
                 self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
+        
+        # Build a reverse map of encoded keys to the original keys, so that
+        # the dictionary keys are what users expect.
         reverse = dict(zip(rvals, keys))
+        
         return dict(((reverse[k], v) for k, v in resp.iteritems()))
 
     def close(self, **kwargs):
