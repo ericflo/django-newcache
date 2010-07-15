@@ -30,6 +30,7 @@ FLAVOR = getattr(settings, 'FLAVOR', '')
 CACHE_VERSION = str(getattr(settings, 'CACHE_VERSION', 1))
 CACHE_BEHAVIORS = getattr(settings, 'CACHE_BEHAVIORS', {'hash': 'crc'})
 CACHE_KEY_MODULE = getattr(settings, 'CACHE_KEY_MODULE', 'newcache')
+CACHE_HERD_TIMEOUT = getattr(settings, 'CACHE_HERD_TIMEOUT', 60)
 
 def get_key(key):
     """
@@ -87,25 +88,58 @@ class CacheClass(BaseCache):
         return timeout
 
     def add(self, key, value, timeout=None):
-        return self._cache.add(key_func(key), value,
-            self._get_memcache_timeout(timeout))
+        packed = (value, (timeout or self.default_timeout) + int(time.time()))
+        return self._cache.add(key_func(key), packed,
+            self._get_memcache_timeout(timeout + CACHE_HERD_TIMEOUT))
 
     def get(self, key, default=None):
-        val = self._cache.get(key_func(key))
-        if val is None:
+        encoded_key = key_func(key)
+        packed = self._cache.get(encoded_key)
+        if packed is None:
+            return default
+        try:
+            val, timeout = packed
+        except (TypeError, ValueError):
+            return packed
+        current_time = int(time.time())
+        if current_time > timeout:
+            packed = (val, CACHE_HERD_TIMEOUT + current_time)
+            self._cache.set(encoded_key, packed,
+                self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
             return default
         return val
 
     def set(self, key, value, timeout=None):
-        self._cache.set(key_func(key), value,
-            self._get_memcache_timeout(timeout))
+        packed = (value, (timeout or self.default_timeout) + int(time.time()))
+        self._cache.set(key_func(key), packed,
+            self._get_memcache_timeout(timeout + CACHE_HERD_TIMEOUT))
 
     def delete(self, key):
         self._cache.delete(key_func(key))
 
     def get_many(self, keys):
         rvals = map(key_func, keys)
-        resp = self._cache.get_multi(rvals)
+        packed_resp = self._cache.get_multi(rvals)
+        resp = {}
+        reinsert = {}
+        current_time = int(time.time())
+        for key, packed in packed_resp.iteritems():
+            if packed is None:
+                resp[key] = packed
+                continue
+            try:
+                val, timeout = packed
+            except (TypeError, ValueError):
+                resp[key] = packed
+                continue
+            if current_time > timeout:
+                reinsert[key] = (val, CACHE_HERD_TIMEOUT + current_time)
+                resp[key] = None
+            else:
+                resp[key] = val
+        if reinsert:
+            self._cache.set_multi(reinsert,
+                self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
         reverse = dict(zip(rvals, keys))
         return dict(((reverse[k], v) for k, v in resp.iteritems()))
 
@@ -125,8 +159,11 @@ class CacheClass(BaseCache):
             raise ValueError("Key '%s' not found" % (key,))
     
     def set_many(self, data, timeout=0):
-        safe_data = dict(((key_func(k), v) for k, v in data.iteritems()))
-        self._cache.set_multi(safe_data, self._get_memcache_timeout(timeout))
+        pack_timeout = (timeout or self.default_timeout) + int(time.time())
+        safe_data = dict((
+            (key_func(k), (v, pack_timeout)) for k, v in data.iteritems()))
+        self._cache.set_multi(safe_data,
+            self._get_memcache_timeout(timeout + CACHE_HERD_TIMEOUT))
     
     def delete_many(self, keys):
         self._cache.delete_multi(map(key_func, keys))
