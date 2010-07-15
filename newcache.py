@@ -88,6 +88,8 @@ class CacheClass(BaseCache):
         return timeout
 
     def add(self, key, value, timeout=None, herd=True):
+        # If the user chooses to use the herd mechanism, then encode some
+        # timestamp information into the object to be persisted into memcached
         if herd:
             packed = (value,
                 (timeout or self.default_timeout) + int(time.time()))
@@ -123,6 +125,8 @@ class CacheClass(BaseCache):
         return val
 
     def set(self, key, value, timeout=None, herd=True):
+        # If the user chooses to use the herd mechanism, then encode some
+        # timestamp information into the object to be persisted into memcached
         if herd:
             packed = (value,
                 (timeout or self.default_timeout) + int(time.time()))
@@ -175,7 +179,8 @@ class CacheClass(BaseCache):
                 self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
         
         # Build a reverse map of encoded keys to the original keys, so that
-        # the dictionary keys are what users expect.
+        # the returned dict's keys are what users expect (in that they match
+        # what the user originally entered)
         reverse = dict(zip(rvals, keys))
         
         return dict(((reverse[k], v) for k, v in resp.iteritems()))
