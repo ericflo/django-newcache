@@ -78,3 +78,4 @@ Features to be Implemented
 --------------------------
 
  * Herd effect prevention
+ * Handle timeout=0 such that it saves it as long as possible
