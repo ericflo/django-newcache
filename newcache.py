@@ -32,6 +32,11 @@ CACHE_BEHAVIORS = getattr(settings, 'CACHE_BEHAVIORS', {'hash': 'crc'})
 CACHE_KEY_MODULE = getattr(settings, 'CACHE_KEY_MODULE', 'newcache')
 CACHE_HERD_TIMEOUT = getattr(settings, 'CACHE_HERD_TIMEOUT', 60)
 
+class Marker(object):
+    pass
+
+MARKER = Marker()
+
 def get_key(key):
     """
     Returns a hashed, versioned, flavored version of the string that was input.
@@ -72,8 +77,27 @@ class CacheClass(BaseCache):
         return client
 
     def _pack_value(self, value, timeout):
+        """
+        Packs a value to include a marker (to indicate that it's a packed
+        value), the value itself, and the value's timeout information.
+        """
         herd_timeout = (timeout or self.default_timeout) + int(time.time())
-        return (value, herd_timeout)
+        return (MARKER, value, herd_timeout)
+    
+    def _unpack_value(self, value, default=None):
+        """
+        Unpacks a value and returns a tuple whose first element is the value,
+        and whose second element is whether it needs to be herd refreshed.
+        """
+        try:
+            marker, unpacked, herd_timeout = value
+        except (ValueError, TypeError):
+            return value, False
+        if not isinstance(marker, Marker):
+            return value, False
+        if herd_timeout < int(time.time()):
+            return unpacked, True
+        return unpacked, False
 
     def _get_memcache_timeout(self, timeout):
         """
@@ -109,19 +133,13 @@ class CacheClass(BaseCache):
         if packed is None:
             return default
         
-        # Try to unpack the value into a timeout and the original value, and if
-        # that fails, then skip the herd mechanism.
-        try:
-            val, timeout = packed
-        except (TypeError, ValueError):
-            return packed
+        val, refresh = self._unpack_value(packed)
         
         # If the cache has expired according to the embedded timeout, then
         # shove it back into the cache for a while, but act as if it was a
         # cache miss.
-        if timeout < int(time.time()):
-            packed = self._pack_value(val, CACHE_HERD_TIMEOUT)
-            self._cache.set(encoded_key, packed,
+        if refresh:
+            self._cache.set(encoded_key, val,
                 self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
             return default
         
@@ -149,27 +167,16 @@ class CacheClass(BaseCache):
         
         resp = {}
         reinsert = {}
-        current_time = int(time.time())
-        
+                
         for key, packed in packed_resp.iteritems():
             # If it was a miss, treat it as a miss to our response & continue
             if packed is None:
                 resp[key] = packed
                 continue
             
-            # Try to unpack the value into a timeout and the original value, and if
-            # that fails, then skip the herd mechanism.
-            try:
-                val, timeout = packed
-            except (TypeError, ValueError):
-                resp[key] = packed
-                continue
-            
-            # If the cache has expired according to the embedded timeout, then
-            # treat it as a miss, and add it to a dict of values to re-insert
-            # for a short period of time.
-            if timeout < current_time:
-                reinsert[key] = self._pack_value(val, CACHE_HERD_TIMEOUT)
+            val, refresh = self._unpack_value(packed)
+            if refresh:
+                reinsert[key] = val
                 resp[key] = None
             else:
                 resp[key] = val
