@@ -71,6 +71,10 @@ class CacheClass(BaseCache):
         self._local.client = client
         return client
 
+    def _pack_value(self, value, timeout):
+        herd_timeout = (timeout or self.default_timeout) + int(time.time())
+        return (value, herd_timeout)
+
     def _get_memcache_timeout(self, timeout):
         """
         Memcached deals with long (> 30 days) timeouts in a special
@@ -91,9 +95,8 @@ class CacheClass(BaseCache):
     def add(self, key, value, timeout=None, herd=True):
         # If the user chooses to use the herd mechanism, then encode some
         # timestamp information into the object to be persisted into memcached
-        if herd:
-            packed = (value,
-                (timeout or self.default_timeout) + int(time.time()))
+        if herd and timeout != 0:
+            packed = self._pack_value(value, timeout)
             real_timeout = timeout + CACHE_HERD_TIMEOUT
         else:
             packed, real_timeout = value, timeout
@@ -116,9 +119,8 @@ class CacheClass(BaseCache):
         # If the cache has expired according to the embedded timeout, then
         # shove it back into the cache for a while, but act as if it was a
         # cache miss.
-        current_time = int(time.time())
-        if current_time > timeout:
-            packed = (val, CACHE_HERD_TIMEOUT + current_time)
+        if timeout < int(time.time()):
+            packed = self._pack_value(val, CACHE_HERD_TIMEOUT)
             self._cache.set(encoded_key, packed,
                 self._get_memcache_timeout(CACHE_HERD_TIMEOUT))
             return default
@@ -128,9 +130,8 @@ class CacheClass(BaseCache):
     def set(self, key, value, timeout=None, herd=True):
         # If the user chooses to use the herd mechanism, then encode some
         # timestamp information into the object to be persisted into memcached
-        if herd:
-            packed = (value,
-                (timeout or self.default_timeout) + int(time.time()))
+        if herd and timeout != 0:
+            packed = self._pack_value(value, timeout)
             real_timeout = timeout + CACHE_HERD_TIMEOUT
         else:
             packed, real_timeout = value, timeout
@@ -167,8 +168,8 @@ class CacheClass(BaseCache):
             # If the cache has expired according to the embedded timeout, then
             # treat it as a miss, and add it to a dict of values to re-insert
             # for a short period of time.
-            if current_time > timeout:
-                reinsert[key] = (val, CACHE_HERD_TIMEOUT + current_time)
+            if timeout < current_time:
+                reinsert[key] = self._pack_value(val, CACHE_HERD_TIMEOUT)
                 resp[key] = None
             else:
                 resp[key] = val
@@ -201,12 +202,15 @@ class CacheClass(BaseCache):
         except NotFoundError:
             raise ValueError("Key '%s' not found" % (key,))
     
-    def set_many(self, data, timeout=0):
-        pack_timeout = (timeout or self.default_timeout) + int(time.time())
-        safe_data = dict((
-            (key_func(k), (v, pack_timeout)) for k, v in data.iteritems()))
-        self._cache.set_multi(safe_data,
-            self._get_memcache_timeout(timeout + CACHE_HERD_TIMEOUT))
+    def set_many(self, data, timeout=None):
+        if timeout == 0:
+            safe_data = dict((
+                (key_func(k), v) for k, v in data.iteritems()))
+        else:
+            safe_data = dict(((key_func(k), self._pack_value(v, timeout))
+                for k, v in data.iteritems()))
+            timeout = self._get_memcache_timeout(timeout)
+        self._cache.set_multi(safe_data, timeout)
     
     def delete_many(self, keys):
         self._cache.delete_multi(map(key_func, keys))
