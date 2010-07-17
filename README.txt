@@ -1,12 +1,13 @@
 django-newcache
 ===============
 
-Newcache is an improved memcached cache backend for Django. It provides two
+Newcache is an improved memcached cache backend for Django. It provides four
 major advantages over Django's built-in cache backend:
 
  * It supports pylibmc.
  * It allows for a function to be run on each key before it's sent to memcached.
  * It supports setting cache keys with infinite timeouts.
+ * It mitigates the thundering herd problem.
 
 It also has some pretty nice defaults. By default, the function that's run on
 each key is one that hashes, versions, and flavors the key.  More on that 
@@ -75,7 +76,36 @@ must provide a get_key function which takes any instance of basestring and
 output a str.
 
 
-Features to be Implemented
+Thundering Herd Mitigation
 --------------------------
 
- * Herd effect prevention
+The thundering herd problem manifests itself when a cache key expires, and many
+things rush to get or generate the data stored for that key all at once.  This 
+is doing a lot of unnecessary work and can cause service outages if the
+database cannot handle the load.  To solve this problem, we really only want 
+one thread or process to fetch this data.
+
+Our method of solving this problem is to shove the old (expired) value back 
+into the cache for a short time while the first process/thread goes and updates
+the key.  This is done in a completely transparent way--no changes should need
+to be made in the application code.
+
+With this cache backend, we have provided an extra 'herd' keyword argument to 
+the set, add, and set_many methods--which is set to True by default. What this 
+does is transform your cache value into a tuple before saving it to the cache. 
+Each value is structured like this:
+
+    (A herd marker, your original value, the expiration timestamp)
+
+Then when it actually sets the cache, it sets the real timeout to a little bit
+longer than the expiration timestamp. Actually, this "little bit" is 
+configurable using the CACHE_HERD_TIMEOUT setting, but it defaults to 60 
+seconds.
+
+Now every time we read a value from the cache, we automatically unpack it and 
+check whether it's expired.  If it has expired, we put it back in the cache for 
+CACHE_HERD_TIMEOUT seconds, but (and this is the key) we act as if it were a 
+cache miss (so we return None, or whatever the default was for the call.)
+
+*Note*: If you want to set a value to be used as a counter (with incr and
+        decr) then you'll want to bypass the herd mechanism.
