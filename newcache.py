@@ -76,7 +76,8 @@ class CacheClass(BaseCache):
         Memcached deals with long (> 30 days) timeouts in a special
         way. Call this function to obtain a safe value for your timeout.
         """
-        timeout = timeout or self.default_timeout
+        if timeout is None:
+            timeout = self.default_timeout
         if timeout > 2592000: # 60*60*24*30, 30 days
             # See http://code.google.com/p/memcached/wiki/FAQ
             # "You can set expire times up to 30 days in the future. After that

@@ -6,6 +6,7 @@ major advantages over Django's built-in cache backend:
 
  * It supports pylibmc.
  * It allows for a function to be run on each key before it's sent to memcached.
+ * It supports setting cache keys with infinite timeouts.
 
 It also has some pretty nice defaults. By default, the function that's run on
 each key is one that hashes, versions, and flavors the key.  More on that 
@@ -78,4 +79,3 @@ Features to be Implemented
 --------------------------
 
  * Herd effect prevention
- * Handle timeout=0 such that it saves it as long as possible
