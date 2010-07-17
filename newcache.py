@@ -209,15 +209,14 @@ class CacheClass(BaseCache):
         except NotFoundError:
             raise ValueError("Key '%s' not found" % (key,))
     
-    def set_many(self, data, timeout=None):
-        if timeout == 0:
-            safe_data = dict((
-                (key_func(k), v) for k, v in data.iteritems()))
-        else:
+    def set_many(self, data, timeout=None, herd=True):
+        if herd and timeout != 0:
             safe_data = dict(((key_func(k), self._pack_value(v, timeout))
                 for k, v in data.iteritems()))
-            timeout = self._get_memcache_timeout(timeout)
-        self._cache.set_multi(safe_data, timeout)
+        else:
+            safe_data = dict((
+                (key_func(k), v) for k, v in data.iteritems()))
+        self._cache.set_multi(safe_data, self._get_memcache_timeout(timeout))
     
     def delete_many(self, keys):
         self._cache.delete_multi(map(key_func, keys))
