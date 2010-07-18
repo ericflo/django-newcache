@@ -1,8 +1,8 @@
 import os
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 
 setup(
     name='django-newcache',
@@ -24,7 +24,5 @@ setup(
         'Environment :: Web Environment',
     ],
     zip_safe=False,
-    packages=find_packages(),
-    include_package_data=True,
-    install_requires=['setuptools'],
+    py_modules=['newcache'],
 )

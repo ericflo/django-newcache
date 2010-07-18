@@ -1,3 +1,4 @@
 *.pyc
 django_newcache.egg-info
 dist
+build
