@@ -5,7 +5,7 @@ import time
 from threading import local
 
 from django.core.cache.backends.base import BaseCache, InvalidCacheBackendError
-from django.utils.hashcompat import md5_constructor
+from django.utils.hashcompat import sha_constructor
 from django.utils import importlib
 from django.utils.encoding import smart_str
 from django.conf import settings
@@ -41,7 +41,7 @@ def get_key(key):
     """
     Returns a hashed, versioned, flavored version of the string that was input.
     """
-    hashed = md5_constructor(smart_str(key)).hexdigest()
+    hashed = sha_constructor(smart_str(key)).hexdigest()
     return ''.join((FLAVOR, '-', CACHE_VERSION, '-', hashed))
 
 key_func = importlib.import_module(CACHE_KEY_MODULE).get_key

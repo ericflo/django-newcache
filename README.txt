@@ -37,7 +37,7 @@ does this mean?  Let's go through each item in detail.
 Keys in memcached come with many restrictions, both on their length and on 
 their contents.  Practically speaking, this means that you can't put spaces
 in your keys, and they can't be very long.  One simple solution to this is to
-create an md5 hash of whatever key you want, and use the hash as your key
+create an sha1 hash of whatever key you want, and use the hash as your key
 instead.  That is what we do in newcache.  It not only allows for long keys, 
 but it also lets us put spaces or other characters in our key as well.
 
