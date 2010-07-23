@@ -6,9 +6,13 @@ from threading import local
 
 from django.core.cache.backends.base import BaseCache, InvalidCacheBackendError
 from django.utils.hashcompat import sha_constructor
-from django.utils import importlib
 from django.utils.encoding import smart_str
 from django.conf import settings
+
+try:
+    from django.utils import importlib
+except ImportError:
+    import importlib
 
 try:
     import pylibmc as memcache
