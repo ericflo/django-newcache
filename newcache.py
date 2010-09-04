@@ -125,11 +125,12 @@ class CacheClass(BaseCache):
         # timestamp information into the object to be persisted into memcached
         if herd and timeout != 0:
             packed = self._pack_value(value, timeout)
-            real_timeout = timeout + CACHE_HERD_TIMEOUT
+            real_timeout = (self._get_memcache_timeout(timeout) +
+                CACHE_HERD_TIMEOUT)
         else:
-            packed, real_timeout = value, timeout
-        return self._cache.add(key_func(key), packed,
-            self._get_memcache_timeout(real_timeout))
+            packed = value
+            real_timeout = self._get_memcache_timeout(timeout)
+        return self._cache.add(key_func(key), packed, real_timeout)
 
     def get(self, key, default=None):
         encoded_key = key_func(key)
@@ -154,11 +155,12 @@ class CacheClass(BaseCache):
         # timestamp information into the object to be persisted into memcached
         if herd and timeout != 0:
             packed = self._pack_value(value, timeout)
-            real_timeout = timeout + CACHE_HERD_TIMEOUT
+            real_timeout = (self._get_memcache_timeout(timeout) +
+                CACHE_HERD_TIMEOUT)
         else:
-            packed, real_timeout = value, timeout
-        return self._cache.set(key_func(key), packed,
-            self._get_memcache_timeout(real_timeout))
+            packed = value
+            real_timeout = self._get_memcache_timeout(timeout)
+        return self._cache.set(key_func(key), packed, real_timeout)
 
     def delete(self, key):
         self._cache.delete(key_func(key))
