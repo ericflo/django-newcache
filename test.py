@@ -88,3 +88,7 @@ def test_none_timeout(c):
     assert c.get('test1') == 1
     c.add('test2', 2, timeout=None)
     assert c.get('test2') == 2
+    c.set('test3', 3, timeout=None, herd=False)
+    assert c.get('test1') == 3
+    c.add('test4', 4, timeout=None, herd=False)
+    assert c.get('test2') == 4
