@@ -78,3 +78,13 @@ def test_herd(c):
     assert c.get('test') == 1
     time.sleep(1)
     assert c.get('test') is None
+
+@cachetest
+def test_none_timeout(c):
+    """
+    Tests that setting the cache with None as the timeout works properly.
+    """
+    c.set('test1', 1, timeout=None)
+    assert c.get('test1') == 1
+    c.add('test2', 2, timeout=None)
+    assert c.get('test2') == 2
